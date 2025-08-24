@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:login_register/page/homepage.dart';
-import 'package:login_register/page/loginpage.dart';
+import '../services/auth_service.dart';
 
 class SignupPage extends StatefulWidget {
   const SignupPage({super.key});
@@ -36,45 +36,56 @@ class _SignupPageState extends State<SignupPage> {
     // Simulate network delay
     await Future.delayed(const Duration(seconds: 1));
 
-    bool success = AuthService.register(
+    // Use Hive-based AuthService
+    bool success = await AuthService.register(
       _emailController.text.trim(),
       _passwordController.text,
       _nameController.text.trim(),
     );
 
-    setState(() => _isLoading = false);
-
     if (success) {
-      // ignore: use_build_context_synchronously
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Account created successfully!'),
-          backgroundColor: Colors.green,
-        ),
-      );
-
       // Auto login after successful registration
-      AuthService.login(
+      await AuthService.login(
         _emailController.text.trim(),
         _passwordController.text,
       );
 
-      Navigator.pushReplacement(
-        // ignore: use_build_context_synchronously
-        context,
-        MaterialPageRoute(
-            builder: (context) => const HomePage(
-                  username: '',
-                )),
-      );
+      setState(() => _isLoading = false);
+
+      // Show success message
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Account created successfully!'),
+            backgroundColor: Colors.green,
+            duration: Duration(seconds: 2),
+          ),
+        );
+
+        // Navigate to homepage
+        final currentUser = AuthService.getCurrentUser();
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(
+            builder: (context) => HomePage(
+              username: currentUser?.name ?? '',
+            ),
+          ),
+        );
+      }
     } else {
-      // ignore: use_build_context_synchronously
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Email already exists'),
-          backgroundColor: Colors.red,
-        ),
-      );
+      setState(() => _isLoading = false);
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content:
+                Text('Email already exists. Please use a different email.'),
+            backgroundColor: Colors.red,
+            duration: Duration(seconds: 3),
+          ),
+        );
+      }
     }
   }
 
@@ -120,6 +131,7 @@ class _SignupPageState extends State<SignupPage> {
               const SizedBox(height: 8),
               TextFormField(
                 controller: _nameController,
+                textCapitalization: TextCapitalization.words,
                 decoration: InputDecoration(
                   hintText: 'Example: John Doe',
                   hintStyle: const TextStyle(color: Colors.grey),
@@ -137,14 +149,25 @@ class _SignupPageState extends State<SignupPage> {
                     borderRadius: BorderRadius.circular(8),
                     borderSide: const BorderSide(color: Colors.blue),
                   ),
+                  errorBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(8),
+                    borderSide: const BorderSide(color: Colors.red),
+                  ),
+                  focusedErrorBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(8),
+                    borderSide: const BorderSide(color: Colors.red),
+                  ),
                   contentPadding: const EdgeInsets.symmetric(
                     horizontal: 16,
                     vertical: 12,
                   ),
                 ),
                 validator: (value) {
-                  if (value == null || value.isEmpty) {
+                  if (value == null || value.trim().isEmpty) {
                     return 'Please enter your full name';
+                  }
+                  if (value.trim().length < 2) {
+                    return 'Name must be at least 2 characters';
                   }
                   return null;
                 },
@@ -164,8 +187,9 @@ class _SignupPageState extends State<SignupPage> {
               TextFormField(
                 controller: _emailController,
                 keyboardType: TextInputType.emailAddress,
+                autocorrect: false,
                 decoration: InputDecoration(
-                  hintText: 'Example johndoe@gmail.com',
+                  hintText: 'Example: johndoe@gmail.com',
                   hintStyle: const TextStyle(color: Colors.grey),
                   filled: true,
                   fillColor: Colors.white,
@@ -181,18 +205,31 @@ class _SignupPageState extends State<SignupPage> {
                     borderRadius: BorderRadius.circular(8),
                     borderSide: const BorderSide(color: Colors.blue),
                   ),
+                  errorBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(8),
+                    borderSide: const BorderSide(color: Colors.red),
+                  ),
+                  focusedErrorBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(8),
+                    borderSide: const BorderSide(color: Colors.red),
+                  ),
                   contentPadding: const EdgeInsets.symmetric(
                     horizontal: 16,
                     vertical: 12,
                   ),
                 ),
                 validator: (value) {
-                  if (value == null || value.isEmpty) {
+                  if (value == null || value.trim().isEmpty) {
                     return 'Please enter your email';
                   }
-                  if (!value.contains('@')) {
-                    return 'Please enter a valid email';
+
+                  // Email validation regex
+                  final emailRegex = RegExp(
+                      r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$');
+                  if (!emailRegex.hasMatch(value.trim())) {
+                    return 'Please enter a valid email address';
                   }
+
                   return null;
                 },
               ),
@@ -212,7 +249,7 @@ class _SignupPageState extends State<SignupPage> {
                 controller: _passwordController,
                 obscureText: _obscurePassword,
                 decoration: InputDecoration(
-                  hintText: '**********',
+                  hintText: '••••••••',
                   hintStyle: const TextStyle(color: Colors.grey),
                   filled: true,
                   fillColor: Colors.white,
@@ -227,6 +264,14 @@ class _SignupPageState extends State<SignupPage> {
                   focusedBorder: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(8),
                     borderSide: const BorderSide(color: Colors.blue),
+                  ),
+                  errorBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(8),
+                    borderSide: const BorderSide(color: Colors.red),
+                  ),
+                  focusedErrorBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(8),
+                    borderSide: const BorderSide(color: Colors.red),
                   ),
                   contentPadding: const EdgeInsets.symmetric(
                     horizontal: 16,
@@ -251,6 +296,9 @@ class _SignupPageState extends State<SignupPage> {
                   if (value.length < 6) {
                     return 'Password must be at least 6 characters';
                   }
+                  if (!RegExp(r'^(?=.*[a-zA-Z])').hasMatch(value)) {
+                    return 'Password must contain at least one letter';
+                  }
                   return null;
                 },
               ),
@@ -270,7 +318,7 @@ class _SignupPageState extends State<SignupPage> {
                 controller: _confirmPasswordController,
                 obscureText: _obscureConfirmPassword,
                 decoration: InputDecoration(
-                  hintText: '***********',
+                  hintText: '••••••••',
                   hintStyle: const TextStyle(color: Colors.grey),
                   filled: true,
                   fillColor: Colors.white,
@@ -285,6 +333,14 @@ class _SignupPageState extends State<SignupPage> {
                   focusedBorder: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(8),
                     borderSide: const BorderSide(color: Colors.blue),
+                  ),
+                  errorBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(8),
+                    borderSide: const BorderSide(color: Colors.red),
+                  ),
+                  focusedErrorBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(8),
+                    borderSide: const BorderSide(color: Colors.red),
                   ),
                   contentPadding: const EdgeInsets.symmetric(
                     horizontal: 16,
@@ -323,9 +379,11 @@ class _SignupPageState extends State<SignupPage> {
                   onPressed: _isLoading ? null : _signup,
                   style: ElevatedButton.styleFrom(
                     backgroundColor: const Color.fromARGB(255, 17, 43, 88),
+                    disabledBackgroundColor: Colors.grey.shade400,
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(8),
                     ),
+                    elevation: 0,
                   ),
                   child: _isLoading
                       ? const SizedBox(
@@ -347,6 +405,8 @@ class _SignupPageState extends State<SignupPage> {
                 ),
               ),
               const SizedBox(height: 24),
+
+              // Login link
               Center(
                 child: GestureDetector(
                   onTap: () => Navigator.pop(context),
@@ -363,6 +423,7 @@ class _SignupPageState extends State<SignupPage> {
                           style: TextStyle(
                             color: Colors.blue,
                             fontWeight: FontWeight.w600,
+                            decoration: TextDecoration.underline,
                           ),
                         ),
                       ],

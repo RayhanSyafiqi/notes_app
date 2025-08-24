@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:login_register/page/homepage.dart';
+import 'package:login_register/models/note.dart';
 
 class NoteDetailPage extends StatefulWidget {
   final Note note;
@@ -45,6 +45,8 @@ class _NoteDetailPageState extends State<NoteDetailPage> {
         title: _titleController.text.trim(),
         content: _contentController.text.trim(),
         lastEdited: DateTime.now(),
+        userId: '',
+        createdAt: _currentNote.createdAt,
       );
     });
 

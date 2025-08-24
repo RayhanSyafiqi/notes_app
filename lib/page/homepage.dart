@@ -1,21 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:login_register/page/notesdetail.dart';
 import 'package:login_register/page/notespage.dart';
+import '../models/note.dart';
+import '../services/auth_service.dart';
+import '../repositories/note_repository.dart';
 import 'dart:math' as math;
-
-class Note {
-  String id;
-  String title;
-  String content;
-  DateTime lastEdited;
-
-  Note({
-    required this.id,
-    required this.title,
-    required this.content,
-    required this.lastEdited,
-  });
-}
 
 class HomePage extends StatefulWidget {
   final String username;
@@ -28,6 +17,28 @@ class HomePage extends StatefulWidget {
 
 class _HomePageState extends State<HomePage> {
   List<Note> notes = [];
+  bool _isLoading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadNotes();
+  }
+
+  void _loadNotes() async {
+    setState(() => _isLoading = true);
+
+    final currentUser = AuthService.getCurrentUser();
+    if (currentUser != null) {
+      final userNotes = NoteRepository.getNotesForUser(currentUser.id);
+      setState(() {
+        notes = userNotes;
+        _isLoading = false;
+      });
+    } else {
+      setState(() => _isLoading = false);
+    }
+  }
 
   void _navigateToNotesForm() async {
     final result = await Navigator.push(
@@ -38,9 +49,9 @@ class _HomePageState extends State<HomePage> {
     );
 
     if (result != null && result is Note) {
-      setState(() {
-        notes.add(result);
-      });
+      // Save to Hive
+      await NoteRepository.createNote(result);
+      _loadNotes(); // Reload notes from Hive
     }
   }
 
@@ -54,36 +65,66 @@ class _HomePageState extends State<HomePage> {
 
     if (result != null) {
       if (result == 'deleted') {
-        setState(() {
-          notes.removeWhere((n) => n.id == note.id);
-        });
+        await NoteRepository.softDeleteNote(note.id);
       } else if (result is Note) {
-        setState(() {
-          int index = notes.indexWhere((n) => n.id == note.id);
-          if (index != -1) {
-            notes[index] = result;
-          }
-        });
+        await NoteRepository.updateNote(result);
       }
+      _loadNotes(); // Reload notes from Hive
     }
+  }
+
+  void _logout() async {
+    await AuthService.logout();
+    Navigator.pushReplacementNamed(context, '/login');
   }
 
   @override
   Widget build(BuildContext context) {
+    if (_isLoading) {
+      return const Scaffold(
+        body: Center(
+          child: CircularProgressIndicator(),
+        ),
+      );
+    }
+
+    final currentUser = AuthService.getCurrentUser();
+
     return Scaffold(
       backgroundColor: const Color.fromARGB(255, 255, 255, 255),
       resizeToAvoidBottomInset: false,
       appBar: AppBar(
         backgroundColor: Colors.white,
         elevation: 0,
-        title: const Text(
-          'Notes App',
-          style: TextStyle(
+        title: Text(
+          'Hi, ${currentUser?.name ?? widget.username}!',
+          style: const TextStyle(
             color: Colors.black,
             fontWeight: FontWeight.bold,
             fontSize: 20,
           ),
         ),
+        actions: [
+          PopupMenuButton<String>(
+            onSelected: (value) {
+              if (value == 'logout') {
+                _logout();
+              }
+            },
+            itemBuilder: (BuildContext context) => [
+              const PopupMenuItem<String>(
+                value: 'logout',
+                child: Row(
+                  children: [
+                    Icon(Icons.logout, color: Colors.red),
+                    SizedBox(width: 8),
+                    Text('Logout'),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ],
       ),
       body: Stack(
         children: [

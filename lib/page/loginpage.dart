@@ -1,69 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:login_register/page/homepage.dart';
 import 'package:login_register/page/signuppage.dart';
-
-// Model untuk Notes
-class Note {
-  String id;
-  String title;
-  String content;
-  DateTime lastEdited;
-
-  Note({
-    required this.id,
-    required this.title,
-    required this.content,
-    required this.lastEdited,
-  });
-}
-
-// Model untuk User
-class User {
-  String email;
-  String password;
-  String name;
-
-  User({
-    required this.email,
-    required this.password,
-    required this.name,
-  });
-}
-
-// Simple Auth Service untuk simulasi
-class AuthService {
-  static final List<User> _users = [];
-  static User? _currentUser;
-
-  static bool register(String email, String password, String name) {
-    // Check if user already exists
-    if (_users.any((user) => user.email == email)) {
-      return false;
-    }
-
-    _users.add(User(email: email, password: password, name: name));
-    return true;
-  }
-
-  static bool login(String email, String password) {
-    try {
-      _currentUser = _users.firstWhere(
-        (user) => user.email == email && user.password == password,
-      );
-      return true;
-    } catch (e) {
-      return false;
-    }
-  }
-
-  static void logout() {
-    _currentUser = null;
-  }
-
-  static User? getCurrentUser() {
-    return _currentUser;
-  }
-}
+import '../services/auth_service.dart';
 
 class LoginPage extends StatefulWidget {
   static String routeName = '/login';
@@ -93,10 +31,8 @@ class _LoginPageState extends State<LoginPage> {
 
     setState(() => _isLoading = true);
 
-    // Simulate network delay
-    await Future.delayed(const Duration(seconds: 1));
-
-    bool success = AuthService.login(
+    // Use Hive-based AuthService
+    bool success = await AuthService.login(
       _emailController.text.trim(),
       _passwordController.text,
     );
@@ -104,12 +40,13 @@ class _LoginPageState extends State<LoginPage> {
     setState(() => _isLoading = false);
 
     if (success) {
+      final currentUser = AuthService.getCurrentUser();
       Navigator.pushReplacement(
         // ignore: use_build_context_synchronously
         context,
         MaterialPageRoute(
-            builder: (context) => const HomePage(
-                  username: '',
+            builder: (context) => HomePage(
+                  username: currentUser?.name ?? '',
                 )),
       );
     } else {
@@ -132,6 +69,7 @@ class _LoginPageState extends State<LoginPage> {
 
   @override
   Widget build(BuildContext context) {
+    // UI code sama seperti sebelumnya...
     return Scaffold(
       backgroundColor: const Color(0xFFF8F9FA),
       body: Padding(

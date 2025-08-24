@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
-import 'homepage.dart';
+import '../models/note.dart';
+import '../services/auth_service.dart';
 
 class NotesFormPage extends StatefulWidget {
   const NotesFormPage({super.key});
@@ -38,11 +39,21 @@ class _NotesFormPageState extends State<NotesFormPage> {
       return;
     }
 
-    final note = Note(
-      id: DateTime.now().millisecondsSinceEpoch.toString(),
+    final currentUser = AuthService.getCurrentUser();
+    if (currentUser == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('User not logged in'),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
+
+    final note = Note.create(
+      userId: currentUser.id,
       title: _titleController.text.trim(),
       content: _contentController.text.trim(),
-      lastEdited: DateTime.now(),
     );
 
     Navigator.pop(context, note);
@@ -50,6 +61,7 @@ class _NotesFormPageState extends State<NotesFormPage> {
 
   @override
   Widget build(BuildContext context) {
+    // UI code sama seperti sebelumnya...
     return Scaffold(
       backgroundColor: Colors.white,
       appBar: AppBar(
