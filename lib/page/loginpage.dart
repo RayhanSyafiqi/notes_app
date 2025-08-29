@@ -31,29 +31,39 @@ class _LoginPageState extends State<LoginPage> {
 
     setState(() => _isLoading = true);
 
-    // Use Hive-based AuthService
-    bool success = await AuthService.login(
-      _emailController.text.trim(),
-      _passwordController.text,
-    );
-
-    setState(() => _isLoading = false);
-
-    if (success) {
-      final currentUser = AuthService.getCurrentUser();
-      Navigator.pushReplacement(
-        // ignore: use_build_context_synchronously
-        context,
-        MaterialPageRoute(
-            builder: (context) => HomePage(
-                  username: currentUser?.name ?? '',
-                )),
+    try {
+      bool success = await AuthService.login(
+        _emailController.text.trim(),
+        _passwordController.text,
       );
-    } else {
+
+      setState(() => _isLoading = false);
+
+      if (success) {
+        final currentUser = AuthService.getCurrentUser();
+        Navigator.pushReplacement(
+          // ignore: use_build_context_synchronously
+          context,
+          MaterialPageRoute(
+              builder: (context) => HomePage(
+                    username: currentUser?.name ?? '',
+                  )),
+        );
+      } else {
+        // ignore: use_build_context_synchronously
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Invalid email or password'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    } catch (e) {
+      setState(() => _isLoading = false);
       // ignore: use_build_context_synchronously
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Invalid email or password'),
+        SnackBar(
+          content: Text('Login failed: ${e.toString()}'),
           backgroundColor: Colors.red,
         ),
       );
@@ -69,7 +79,6 @@ class _LoginPageState extends State<LoginPage> {
 
   @override
   Widget build(BuildContext context) {
-    // UI code sama seperti sebelumnya...
     return Scaffold(
       backgroundColor: const Color(0xFFF8F9FA),
       body: Padding(

@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
-import '../models/note.dart';
-import '../services/auth_service.dart';
+import '../services/note_service.dart';
 
 class NotesFormPage extends StatefulWidget {
   const NotesFormPage({super.key});
@@ -12,6 +11,7 @@ class NotesFormPage extends StatefulWidget {
 class _NotesFormPageState extends State<NotesFormPage> {
   late TextEditingController _titleController;
   late TextEditingController _contentController;
+  bool _isLoading = false;
 
   @override
   void initState() {
@@ -27,7 +27,7 @@ class _NotesFormPageState extends State<NotesFormPage> {
     super.dispose();
   }
 
-  void _saveNote() {
+  void _saveNote() async {
     if (_titleController.text.trim().isEmpty &&
         _contentController.text.trim().isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -39,29 +39,49 @@ class _NotesFormPageState extends State<NotesFormPage> {
       return;
     }
 
-    final currentUser = AuthService.getCurrentUser();
-    if (currentUser == null) {
+    setState(() => _isLoading = true);
+
+    try {
+      final note = await NoteService.createNote(
+        title: _titleController.text.trim(),
+        content: _contentController.text.trim(),
+      );
+
+      setState(() => _isLoading = false);
+
+      if (note != null) {
+        // ignore: use_build_context_synchronously
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Note saved successfully!'),
+            backgroundColor: Colors.green,
+          ),
+        );
+        // ignore: use_build_context_synchronously
+        Navigator.pop(context, note);
+      } else {
+        // ignore: use_build_context_synchronously
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Failed to save note'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    } catch (e) {
+      setState(() => _isLoading = false);
+      // ignore: use_build_context_synchronously
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('User not logged in'),
+        SnackBar(
+          content: Text('Error: ${e.toString()}'),
           backgroundColor: Colors.red,
         ),
       );
-      return;
     }
-
-    final note = Note.create(
-      userId: currentUser.id,
-      title: _titleController.text.trim(),
-      content: _contentController.text.trim(),
-    );
-
-    Navigator.pop(context, note);
   }
 
   @override
   Widget build(BuildContext context) {
-    // UI code sama seperti sebelumnya...
     return Scaffold(
       backgroundColor: Colors.white,
       appBar: AppBar(
@@ -81,17 +101,26 @@ class _NotesFormPageState extends State<NotesFormPage> {
         ),
         centerTitle: true,
         actions: [
-          TextButton(
-            onPressed: _saveNote,
-            child: const Text(
-              'Save',
-              style: TextStyle(
-                color: Colors.blue,
-                fontSize: 16,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-          ),
+          _isLoading
+              ? const Padding(
+                  padding: EdgeInsets.all(16.0),
+                  child: SizedBox(
+                    width: 20,
+                    height: 20,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  ),
+                )
+              : TextButton(
+                  onPressed: _saveNote,
+                  child: const Text(
+                    'Save',
+                    style: TextStyle(
+                      color: Colors.blue,
+                      fontSize: 16,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ),
         ],
       ),
       body: Padding(

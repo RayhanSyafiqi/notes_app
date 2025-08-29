@@ -1,10 +1,11 @@
 import 'package:flutter/material.dart';
-import 'package:login_register/models/note.dart';
+import '../models/note.dart';
+import '../services/note_service.dart';
 
 class NoteDetailPage extends StatefulWidget {
   final Note note;
 
-  const NoteDetailPage({Key? key, required this.note}) : super(key: key);
+  const NoteDetailPage({super.key, required this.note});
 
   @override
   State<NoteDetailPage> createState() => _NoteDetailPageState();
@@ -14,6 +15,7 @@ class _NoteDetailPageState extends State<NoteDetailPage> {
   late TextEditingController _titleController;
   late TextEditingController _contentController;
   bool _isEditing = false;
+  bool _isLoading = false;
   late Note _currentNote;
 
   @override
@@ -34,34 +36,59 @@ class _NoteDetailPageState extends State<NoteDetailPage> {
   void _toggleEditMode() {
     setState(() {
       _isEditing = !_isEditing;
+      if (!_isEditing) {
+        // Reset controllers if canceling edit
+        _titleController.text = _currentNote.title;
+        _contentController.text = _currentNote.content;
+      }
     });
   }
 
-  void _saveData() {
-    setState(() {
-      _isEditing = false;
-      _currentNote = Note(
+  void _saveData() async {
+    setState(() => _isLoading = true);
+
+    try {
+      final updatedNote = await NoteService.updateNote(
         id: _currentNote.id,
         title: _titleController.text.trim(),
         content: _contentController.text.trim(),
-        lastEdited: DateTime.now(),
-        userId: '',
-        createdAt: _currentNote.createdAt,
       );
-    });
 
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('Note saved successfully!'),
-        backgroundColor: Colors.green,
-        duration: Duration(seconds: 2),
-      ),
-    );
+      setState(() => _isLoading = false);
 
-    // Automatically return to homepage after saving
-    Future.delayed(const Duration(seconds: 1), () {
-      Navigator.pop(context, _currentNote);
-    });
+      if (updatedNote != null) {
+        setState(() {
+          _isEditing = false;
+          _currentNote = updatedNote;
+        });
+
+        // ignore: use_build_context_synchronously
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Note updated successfully!'),
+            backgroundColor: Colors.green,
+            duration: Duration(seconds: 2),
+          ),
+        );
+      } else {
+        // ignore: use_build_context_synchronously
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Failed to update note'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    } catch (e) {
+      setState(() => _isLoading = false);
+      // ignore: use_build_context_synchronously
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Error: ${e.toString()}'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
   }
 
   void _deleteData() {
@@ -77,9 +104,44 @@ class _NoteDetailPageState extends State<NoteDetailPage> {
               child: const Text('Cancel'),
             ),
             TextButton(
-              onPressed: () {
+              onPressed: () async {
                 Navigator.pop(context);
-                Navigator.pop(context, 'deleted');
+
+                setState(() => _isLoading = true);
+
+                try {
+                  final success = await NoteService.deleteNote(_currentNote.id);
+
+                  if (success) {
+                    // ignore: use_build_context_synchronously
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        content: Text('Note deleted successfully'),
+                        backgroundColor: Colors.green,
+                      ),
+                    );
+                    // ignore: use_build_context_synchronously
+                    Navigator.pop(context, 'deleted');
+                  } else {
+                    setState(() => _isLoading = false);
+                    // ignore: use_build_context_synchronously
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        content: Text('Failed to delete note'),
+                        backgroundColor: Colors.red,
+                      ),
+                    );
+                  }
+                } catch (e) {
+                  setState(() => _isLoading = false);
+                  // ignore: use_build_context_synchronously
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text('Error: ${e.toString()}'),
+                      backgroundColor: Colors.red,
+                    ),
+                  );
+                }
               },
               style: TextButton.styleFrom(foregroundColor: Colors.red),
               child: const Text('Delete'),
@@ -123,9 +185,7 @@ class _NoteDetailPageState extends State<NoteDetailPage> {
                   title: const Text('Cancel Edit'),
                   onTap: () {
                     Navigator.pop(context);
-                    setState(() {
-                      _isEditing = false;
-                    });
+                    _toggleEditMode();
                   },
                 ),
               ListTile(
@@ -143,8 +203,20 @@ class _NoteDetailPageState extends State<NoteDetailPage> {
     );
   }
 
+  String _formatDate(DateTime date) {
+    return '${date.hour}:${date.minute.toString().padLeft(2, '0')} - ${date.day}/${date.month}/${date.year}';
+  }
+
   @override
   Widget build(BuildContext context) {
+    if (_isLoading) {
+      return const Scaffold(
+        body: Center(
+          child: CircularProgressIndicator(),
+        ),
+      );
+    }
+
     return Scaffold(
       backgroundColor: Colors.white,
       appBar: AppBar(
@@ -173,6 +245,7 @@ class _NoteDetailPageState extends State<NoteDetailPage> {
                 Container(
                   padding: const EdgeInsets.all(8),
                   decoration: BoxDecoration(
+                    // ignore: deprecated_member_use
                     color: Colors.orange.withOpacity(0.1),
                     borderRadius: BorderRadius.circular(8),
                   ),
@@ -246,11 +319,13 @@ class _NoteDetailPageState extends State<NoteDetailPage> {
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Text(
-                  'Last edited on ${_currentNote.lastEdited.hour}:${_currentNote.lastEdited.minute.toString().padLeft(2, '0')}',
-                  style: const TextStyle(
-                    fontSize: 14,
-                    color: Colors.grey,
+                Expanded(
+                  child: Text(
+                    'Last edited: ${_formatDate(_currentNote.updatedAt)}',
+                    style: const TextStyle(
+                      fontSize: 14,
+                      color: Colors.grey,
+                    ),
                   ),
                 ),
                 GestureDetector(

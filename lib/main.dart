@@ -1,14 +1,10 @@
 import 'package:flutter/material.dart';
-import 'services/hive_service.dart';
 import 'services/auth_service.dart';
 import 'page/loginpage.dart';
 import 'page/homepage.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-
-  // Initialize Hive
-  await HiveService.init();
 
   // Load current user if exists
   await AuthService.loadCurrentUser();

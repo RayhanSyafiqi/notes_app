@@ -1,66 +1,82 @@
+import 'package:flutter/foundation.dart';
+
 import '../models/user.dart';
-import '../repositories/user_repository.dart';
-import 'hive_service.dart';
+import 'api_service.dart';
 
 class AuthService {
   static User? _currentUser;
 
   static Future<bool> register(
       String email, String password, String name) async {
-    final user = User.create(
-      email: email,
-      password: password, // Consider hashing in production
+    final response = await ApiService.register(
       name: name,
+      email: email,
+      password: password,
     );
 
-    return await UserRepository.createUser(user);
+    if (response['success']) {
+      // Auto login after successful registration
+      return await login(email, password);
+    }
+
+    return false;
   }
 
   static Future<bool> login(String email, String password) async {
-    final user = UserRepository.validateLogin(email, password);
-    if (user != null) {
-      _currentUser = user;
-      await _saveCurrentUserToSettings();
+    final response = await ApiService.login(
+      email: email,
+      password: password,
+    );
+
+    if (response['success']) {
+      final data = response['data'];
+      final token = data['token'];
+
+      // Save token
+      await ApiService.saveToken(token);
+
+      // Load user profile
+      await loadCurrentUser();
+
       return true;
     }
+
     return false;
   }
 
   static Future<void> logout() async {
     _currentUser = null;
-    await HiveService.settingsBox.delete('current_user_id');
+    await ApiService.removeToken();
   }
 
   static User? getCurrentUser() {
     return _currentUser;
   }
 
-  static Future<void> _saveCurrentUserToSettings() async {
-    if (_currentUser != null) {
-      await HiveService.settingsBox.put('current_user_id', _currentUser!.id);
-    }
-  }
-
   static Future<void> loadCurrentUser() async {
-    final userId = HiveService.settingsBox.get('current_user_id');
-    if (userId != null) {
-      _currentUser = UserRepository.getUserById(userId);
+    try {
+      final token = await ApiService.getToken();
+      if (token != null) {
+        final response = await ApiService.getProfile();
+
+        if (response['success']) {
+          final userData = response['data']['user'];
+          _currentUser = User.fromJson(userData);
+        }
+      }
+    } catch (e) {
+      if (kDebugMode) {
+        print('Error loading current user: $e');
+      }
     }
   }
 
-  static Future<bool> updateUserProfile({
-    String? email,
-    String? name,
-    String? password,
-  }) async {
-    if (_currentUser != null) {
-      _currentUser!.updateInfo(
-        email: email,
-        name: name,
-        password: password,
-      );
-      return await UserRepository.updateUser(_currentUser!);
-    }
-    return false;
+  static Future<bool> isLoggedIn() async {
+    final token = await ApiService.getToken();
+    return token != null;
+  }
+
+  static String getErrorMessage(Map<String, dynamic> response) {
+    return response['message'] ?? 'An error occurred';
   }
 }

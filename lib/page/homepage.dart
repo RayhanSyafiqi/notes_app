@@ -3,7 +3,7 @@ import 'package:login_register/page/notesdetail.dart';
 import 'package:login_register/page/notespage.dart';
 import '../models/note.dart';
 import '../services/auth_service.dart';
-import '../repositories/note_repository.dart';
+import '../services/note_service.dart';
 import 'dart:math' as math;
 
 class HomePage extends StatefulWidget {
@@ -18,6 +18,7 @@ class HomePage extends StatefulWidget {
 class _HomePageState extends State<HomePage> {
   List<Note> notes = [];
   bool _isLoading = true;
+  String _errorMessage = '';
 
   @override
   void initState() {
@@ -26,17 +27,22 @@ class _HomePageState extends State<HomePage> {
   }
 
   void _loadNotes() async {
-    setState(() => _isLoading = true);
+    setState(() {
+      _isLoading = true;
+      _errorMessage = '';
+    });
 
-    final currentUser = AuthService.getCurrentUser();
-    if (currentUser != null) {
-      final userNotes = NoteRepository.getNotesForUser(currentUser.id);
+    try {
+      final userNotes = await NoteService.getNotes();
       setState(() {
         notes = userNotes;
         _isLoading = false;
       });
-    } else {
-      setState(() => _isLoading = false);
+    } catch (e) {
+      setState(() {
+        _isLoading = false;
+        _errorMessage = 'Failed to load notes: ${e.toString()}';
+      });
     }
   }
 
@@ -49,9 +55,7 @@ class _HomePageState extends State<HomePage> {
     );
 
     if (result != null && result is Note) {
-      // Save to Hive
-      await NoteRepository.createNote(result);
-      _loadNotes(); // Reload notes from Hive
+      _loadNotes(); // Reload notes from API
     }
   }
 
@@ -64,18 +68,34 @@ class _HomePageState extends State<HomePage> {
     );
 
     if (result != null) {
-      if (result == 'deleted') {
-        await NoteRepository.softDeleteNote(note.id);
-      } else if (result is Note) {
-        await NoteRepository.updateNote(result);
-      }
-      _loadNotes(); // Reload notes from Hive
+      _loadNotes(); // Reload notes from API
     }
   }
 
   void _logout() async {
-    await AuthService.logout();
-    Navigator.pushReplacementNamed(context, '/login');
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Logout'),
+        content: const Text('Are you sure you want to logout?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () async {
+              Navigator.pop(context);
+              await AuthService.logout();
+              // ignore: use_build_context_synchronously
+              Navigator.pushReplacementNamed(context, '/login');
+            },
+            style: TextButton.styleFrom(foregroundColor: Colors.red),
+            child: const Text('Logout'),
+          ),
+        ],
+      ),
+    );
   }
 
   @override
@@ -84,6 +104,58 @@ class _HomePageState extends State<HomePage> {
       return const Scaffold(
         body: Center(
           child: CircularProgressIndicator(),
+        ),
+      );
+    }
+
+    if (_errorMessage.isNotEmpty) {
+      return Scaffold(
+        appBar: AppBar(
+          title: const Text('Notes App'),
+          actions: [
+            PopupMenuButton<String>(
+              onSelected: (value) {
+                if (value == 'logout') {
+                  _logout();
+                }
+              },
+              itemBuilder: (BuildContext context) => [
+                const PopupMenuItem<String>(
+                  value: 'logout',
+                  child: Row(
+                    children: [
+                      Icon(Icons.logout, color: Colors.red),
+                      SizedBox(width: 8),
+                      Text('Logout'),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+        body: Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              const Icon(
+                Icons.error_outline,
+                size: 64,
+                color: Colors.red,
+              ),
+              const SizedBox(height: 16),
+              Text(
+                _errorMessage,
+                textAlign: TextAlign.center,
+                style: const TextStyle(fontSize: 16),
+              ),
+              const SizedBox(height: 16),
+              ElevatedButton(
+                onPressed: _loadNotes,
+                child: const Text('Retry'),
+              ),
+            ],
+          ),
         ),
       );
     }
@@ -109,9 +181,21 @@ class _HomePageState extends State<HomePage> {
             onSelected: (value) {
               if (value == 'logout') {
                 _logout();
+              } else if (value == 'refresh') {
+                _loadNotes();
               }
             },
             itemBuilder: (BuildContext context) => [
+              const PopupMenuItem<String>(
+                value: 'refresh',
+                child: Row(
+                  children: [
+                    Icon(Icons.refresh, color: Colors.blue),
+                    SizedBox(width: 8),
+                    Text('Refresh'),
+                  ],
+                ),
+              ),
               const PopupMenuItem<String>(
                 value: 'logout',
                 child: Row(
@@ -142,6 +226,7 @@ class _HomePageState extends State<HomePage> {
                   borderRadius: BorderRadius.circular(30),
                   boxShadow: [
                     BoxShadow(
+                      // ignore: deprecated_member_use
                       color: Colors.black.withOpacity(0.2),
                       blurRadius: 10,
                       offset: const Offset(0, 4),
@@ -253,6 +338,7 @@ class _HomePageState extends State<HomePage> {
                       ),
                       boxShadow: [
                         BoxShadow(
+                          // ignore: deprecated_member_use
                           color: Colors.black.withOpacity(0.05),
                           blurRadius: 4,
                           offset: const Offset(0, 2),
@@ -269,6 +355,7 @@ class _HomePageState extends State<HomePage> {
                               width: 20,
                               height: 20,
                               decoration: BoxDecoration(
+                                // ignore: deprecated_member_use
                                 color: Colors.orange.withOpacity(0.1),
                                 borderRadius: BorderRadius.circular(4),
                               ),
@@ -281,9 +368,7 @@ class _HomePageState extends State<HomePage> {
                             const SizedBox(width: 8),
                             Expanded(
                               child: Text(
-                                note.title.isEmpty
-                                    ? 'New Product Idea'
-                                    : note.title,
+                                note.title.isEmpty ? 'Untitled' : note.title,
                                 style: const TextStyle(
                                   fontWeight: FontWeight.w600,
                                   fontSize: 25,
@@ -300,9 +385,7 @@ class _HomePageState extends State<HomePage> {
                         // Content
                         Expanded(
                           child: Text(
-                            note.content.isEmpty
-                                ? 'Create a mobile app UI Kit that provide a basic notes functionality but with some improvement.\n\nThere will be a choice to select what kind of notes...'
-                                : note.content,
+                            note.content.isEmpty ? 'No content' : note.content,
                             style: const TextStyle(
                               color: Colors.grey,
                               fontSize: 15,
@@ -401,30 +484,4 @@ class CurvedArrowPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
-}
-
-class CurvedArrow extends StatelessWidget {
-  final double width;
-  final double height;
-  final Color color;
-  final double strokeWidth;
-
-  const CurvedArrow({
-    super.key,
-    this.width = 100,
-    this.height = 100,
-    this.color = Colors.grey,
-    this.strokeWidth = 2.0,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return CustomPaint(
-      size: Size(width, height),
-      painter: CurvedArrowPainter(
-        color: color,
-        strokeWidth: strokeWidth,
-      ),
-    );
-  }
 }
