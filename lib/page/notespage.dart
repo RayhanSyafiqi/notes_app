@@ -42,41 +42,28 @@ class _NotesFormPageState extends State<NotesFormPage> {
     setState(() => _isLoading = true);
 
     try {
-      final note = await NoteService.createNote(
+      await NoteService.createNote(
         title: _titleController.text.trim(),
         content: _contentController.text.trim(),
       );
 
-      setState(() => _isLoading = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Note saved successfully!'),
+          backgroundColor: Colors.green,
+        ),
+      );
 
-      if (note != null) {
-        // ignore: use_build_context_synchronously
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Note saved successfully!'),
-            backgroundColor: Colors.green,
-          ),
-        );
-        // ignore: use_build_context_synchronously
-        Navigator.pop(context, note);
-      } else {
-        // ignore: use_build_context_synchronously
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Failed to save note'),
-            backgroundColor: Colors.red,
-          ),
-        );
-      }
+      Navigator.pop(context, true); // Return success
     } catch (e) {
-      setState(() => _isLoading = false);
-      // ignore: use_build_context_synchronously
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Error: ${e.toString()}'),
+          content: Text('Failed to save note: $e'),
           backgroundColor: Colors.red,
         ),
       );
+    } finally {
+      setState(() => _isLoading = false);
     }
   }
 

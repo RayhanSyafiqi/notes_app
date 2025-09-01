@@ -31,39 +31,25 @@ class _LoginPageState extends State<LoginPage> {
 
     setState(() => _isLoading = true);
 
-    try {
-      bool success = await AuthService.login(
-        _emailController.text.trim(),
-        _passwordController.text,
+    final result = await AuthService.login(
+      email: _emailController.text.trim(),
+      password: _passwordController.text,
+    );
+
+    setState(() => _isLoading = false);
+
+    if (result['success']) {
+      final currentUser = AuthService.getCurrentUser();
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(
+          builder: (context) => HomePage(username: currentUser?.name ?? ''),
+        ),
       );
-
-      setState(() => _isLoading = false);
-
-      if (success) {
-        final currentUser = AuthService.getCurrentUser();
-        Navigator.pushReplacement(
-          // ignore: use_build_context_synchronously
-          context,
-          MaterialPageRoute(
-              builder: (context) => HomePage(
-                    username: currentUser?.name ?? '',
-                  )),
-        );
-      } else {
-        // ignore: use_build_context_synchronously
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Invalid email or password'),
-            backgroundColor: Colors.red,
-          ),
-        );
-      }
-    } catch (e) {
-      setState(() => _isLoading = false);
-      // ignore: use_build_context_synchronously
+    } else {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Login failed: ${e.toString()}'),
+          content: Text(result['message']),
           backgroundColor: Colors.red,
         ),
       );

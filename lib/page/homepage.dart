@@ -18,7 +18,6 @@ class HomePage extends StatefulWidget {
 class _HomePageState extends State<HomePage> {
   List<Note> notes = [];
   bool _isLoading = true;
-  String _errorMessage = '';
 
   @override
   void initState() {
@@ -27,22 +26,39 @@ class _HomePageState extends State<HomePage> {
   }
 
   void _loadNotes() async {
-    setState(() {
-      _isLoading = true;
-      _errorMessage = '';
-    });
+    setState(() => _isLoading = true);
 
     try {
-      final userNotes = await NoteService.getNotes();
+      final userNotes = await NoteService.getAllNotes();
       setState(() {
         notes = userNotes;
         _isLoading = false;
       });
     } catch (e) {
-      setState(() {
-        _isLoading = false;
-        _errorMessage = 'Failed to load notes: ${e.toString()}';
-      });
+      print('Load notes error: $e');
+
+      setState(() => _isLoading = false);
+
+      // Check if session expired
+      if (e.toString().contains('Session expired')) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Session expired. Please login again.'),
+            backgroundColor: Colors.orange,
+          ),
+        );
+
+        Future.delayed(const Duration(seconds: 2), () {
+          Navigator.pushReplacementNamed(context, '/login');
+        });
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Failed to load notes: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
     }
   }
 
@@ -54,8 +70,8 @@ class _HomePageState extends State<HomePage> {
       ),
     );
 
-    if (result != null && result is Note) {
-      _loadNotes(); // Reload notes from API
+    if (result == true) {
+      _loadNotes(); // Reload notes
     }
   }
 
@@ -67,8 +83,8 @@ class _HomePageState extends State<HomePage> {
       ),
     );
 
-    if (result != null) {
-      _loadNotes(); // Reload notes from API
+    if (result == true) {
+      _loadNotes(); // Reload notes
     }
   }
 
@@ -87,7 +103,6 @@ class _HomePageState extends State<HomePage> {
             onPressed: () async {
               Navigator.pop(context);
               await AuthService.logout();
-              // ignore: use_build_context_synchronously
               Navigator.pushReplacementNamed(context, '/login');
             },
             style: TextButton.styleFrom(foregroundColor: Colors.red),
@@ -100,76 +115,13 @@ class _HomePageState extends State<HomePage> {
 
   @override
   Widget build(BuildContext context) {
-    if (_isLoading) {
-      return const Scaffold(
-        body: Center(
-          child: CircularProgressIndicator(),
-        ),
-      );
-    }
-
-    if (_errorMessage.isNotEmpty) {
-      return Scaffold(
-        appBar: AppBar(
-          title: const Text('Notes App'),
-          actions: [
-            PopupMenuButton<String>(
-              onSelected: (value) {
-                if (value == 'logout') {
-                  _logout();
-                }
-              },
-              itemBuilder: (BuildContext context) => [
-                const PopupMenuItem<String>(
-                  value: 'logout',
-                  child: Row(
-                    children: [
-                      Icon(Icons.logout, color: Colors.red),
-                      SizedBox(width: 8),
-                      Text('Logout'),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-          ],
-        ),
-        body: Center(
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              const Icon(
-                Icons.error_outline,
-                size: 64,
-                color: Colors.red,
-              ),
-              const SizedBox(height: 16),
-              Text(
-                _errorMessage,
-                textAlign: TextAlign.center,
-                style: const TextStyle(fontSize: 16),
-              ),
-              const SizedBox(height: 16),
-              ElevatedButton(
-                onPressed: _loadNotes,
-                child: const Text('Retry'),
-              ),
-            ],
-          ),
-        ),
-      );
-    }
-
-    final currentUser = AuthService.getCurrentUser();
-
     return Scaffold(
-      backgroundColor: const Color.fromARGB(255, 255, 255, 255),
-      resizeToAvoidBottomInset: false,
+      backgroundColor: Colors.white,
       appBar: AppBar(
         backgroundColor: Colors.white,
         elevation: 0,
         title: Text(
-          'Hi, ${currentUser?.name ?? widget.username}!',
+          'Hi, ${widget.username}!',
           style: const TextStyle(
             color: Colors.black,
             fontWeight: FontWeight.bold,
@@ -210,44 +162,45 @@ class _HomePageState extends State<HomePage> {
           ),
         ],
       ),
-      body: Stack(
-        children: [
-          notes.isEmpty ? _buildEmptyState() : _buildNotesList(),
-          Positioned(
-            bottom: 24,
-            left: 0,
-            right: 0,
-            child: Center(
-              child: Container(
-                width: 60,
-                height: 60,
-                decoration: BoxDecoration(
-                  color: const Color(0xFF4A5568),
-                  borderRadius: BorderRadius.circular(30),
-                  boxShadow: [
-                    BoxShadow(
-                      // ignore: deprecated_member_use
-                      color: Colors.black.withOpacity(0.2),
-                      blurRadius: 10,
-                      offset: const Offset(0, 4),
+      body: _isLoading
+          ? const Center(child: CircularProgressIndicator())
+          : Stack(
+              children: [
+                notes.isEmpty ? _buildEmptyState() : _buildNotesList(),
+                Positioned(
+                  bottom: 24,
+                  left: 0,
+                  right: 0,
+                  child: Center(
+                    child: Container(
+                      width: 60,
+                      height: 60,
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF4A5568),
+                        borderRadius: BorderRadius.circular(30),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withOpacity(0.2),
+                            blurRadius: 10,
+                            offset: const Offset(0, 4),
+                          ),
+                        ],
+                      ),
+                      child: FloatingActionButton(
+                        backgroundColor: Colors.transparent,
+                        elevation: 0,
+                        onPressed: _navigateToNotesForm,
+                        child: const Icon(
+                          Icons.add,
+                          color: Colors.white,
+                          size: 28,
+                        ),
+                      ),
                     ),
-                  ],
-                ),
-                child: FloatingActionButton(
-                  backgroundColor: Colors.transparent,
-                  elevation: 0,
-                  onPressed: _navigateToNotesForm,
-                  child: const Icon(
-                    Icons.add,
-                    color: Colors.white,
-                    size: 28,
                   ),
                 ),
-              ),
+              ],
             ),
-          ),
-        ],
-      ),
     );
   }
 
@@ -284,7 +237,6 @@ class _HomePageState extends State<HomePage> {
             ),
           ),
           const SizedBox(height: 20),
-          // Arrow pointing to FAB
           CustomPaint(
             size: const Size(100, 80),
             painter: CurvedArrowPainter(),
@@ -300,18 +252,13 @@ class _HomePageState extends State<HomePage> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Text(
-                'My Notes',
-                style: TextStyle(
-                  fontSize: 28,
-                  fontWeight: FontWeight.bold,
-                  color: Colors.black,
-                ),
-              ),
-            ],
+          const Text(
+            'My Notes',
+            style: TextStyle(
+              fontSize: 28,
+              fontWeight: FontWeight.bold,
+              color: Colors.black,
+            ),
           ),
           const SizedBox(height: 20),
           Expanded(
@@ -338,7 +285,6 @@ class _HomePageState extends State<HomePage> {
                       ),
                       boxShadow: [
                         BoxShadow(
-                          // ignore: deprecated_member_use
                           color: Colors.black.withOpacity(0.05),
                           blurRadius: 4,
                           offset: const Offset(0, 2),
@@ -348,14 +294,12 @@ class _HomePageState extends State<HomePage> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        // Icon and title row
                         Row(
                           children: [
                             Container(
                               width: 20,
                               height: 20,
                               decoration: BoxDecoration(
-                                // ignore: deprecated_member_use
                                 color: Colors.orange.withOpacity(0.1),
                                 borderRadius: BorderRadius.circular(4),
                               ),
@@ -371,7 +315,7 @@ class _HomePageState extends State<HomePage> {
                                 note.title.isEmpty ? 'Untitled' : note.title,
                                 style: const TextStyle(
                                   fontWeight: FontWeight.w600,
-                                  fontSize: 25,
+                                  fontSize: 16,
                                   color: Colors.black,
                                 ),
                                 maxLines: 2,
@@ -381,14 +325,12 @@ class _HomePageState extends State<HomePage> {
                           ],
                         ),
                         const SizedBox(height: 12),
-
-                        // Content
                         Expanded(
                           child: Text(
                             note.content.isEmpty ? 'No content' : note.content,
                             style: const TextStyle(
                               color: Colors.grey,
-                              fontSize: 15,
+                              fontSize: 14,
                               height: 1.4,
                             ),
                             maxLines: 8,
@@ -409,61 +351,36 @@ class _HomePageState extends State<HomePage> {
 }
 
 class CurvedArrowPainter extends CustomPainter {
-  final Color color;
-  final double strokeWidth;
-
-  CurvedArrowPainter({
-    this.color = Colors.grey,
-    this.strokeWidth = 2.0,
-  });
-
   @override
   void paint(Canvas canvas, Size size) {
     final paint = Paint()
-      ..color = color
-      ..strokeWidth = strokeWidth
+      ..color = Colors.grey
+      ..strokeWidth = 2.0
       ..style = PaintingStyle.stroke
       ..strokeCap = StrokeCap.round;
 
     final path = Path();
-
-    // Starting point (top)
     final startX = size.width * 0.5;
     final startY = size.height * 0.1;
-
-    // Control points for the curve
     final controlPoint1X = size.width * 0.8;
     final controlPoint1Y = size.height * 0.3;
     final controlPoint2X = size.width * 0.7;
     final controlPoint2Y = size.height * 0.7;
-
-    // End point (bottom right)
     final endX = size.width * 0.6;
     final endY = size.height * 0.9;
 
-    // Draw the curved line
     path.moveTo(startX, startY);
-    path.cubicTo(
-      controlPoint1X,
-      controlPoint1Y,
-      controlPoint2X,
-      controlPoint2Y,
-      endX,
-      endY,
-    );
-
+    path.cubicTo(controlPoint1X, controlPoint1Y, controlPoint2X, controlPoint2Y,
+        endX, endY);
     canvas.drawPath(path, paint);
 
-    // Draw arrow head
+    // Arrow head
     const arrowHeadLength = 12.0;
-    const arrowHeadAngle = 0.5; // radians
-
-    // Calculate the direction of the arrow at the end point
+    const arrowHeadAngle = 0.5;
     final dx = endX - controlPoint2X;
     final dy = endY - controlPoint2Y;
     final angle = math.atan2(dy, dx);
 
-    // Arrow head points
     final arrowPoint1X =
         endX - arrowHeadLength * math.cos(angle - arrowHeadAngle);
     final arrowPoint1Y =
@@ -473,12 +390,10 @@ class CurvedArrowPainter extends CustomPainter {
     final arrowPoint2Y =
         endY - arrowHeadLength * math.sin(angle + arrowHeadAngle);
 
-    // Draw arrow head
     final arrowPath = Path();
     arrowPath.moveTo(arrowPoint1X, arrowPoint1Y);
     arrowPath.lineTo(endX, endY);
     arrowPath.lineTo(arrowPoint2X, arrowPoint2Y);
-
     canvas.drawPath(arrowPath, paint);
   }
 

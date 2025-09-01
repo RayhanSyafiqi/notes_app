@@ -5,7 +5,7 @@ import '../services/note_service.dart';
 class NoteDetailPage extends StatefulWidget {
   final Note note;
 
-  const NoteDetailPage({super.key, required this.note});
+  const NoteDetailPage({Key? key, required this.note}) : super(key: key);
 
   @override
   State<NoteDetailPage> createState() => _NoteDetailPageState();
@@ -44,7 +44,7 @@ class _NoteDetailPageState extends State<NoteDetailPage> {
     });
   }
 
-  void _saveData() async {
+  void _saveNote() async {
     setState(() => _isLoading = true);
 
     try {
@@ -54,44 +54,31 @@ class _NoteDetailPageState extends State<NoteDetailPage> {
         content: _contentController.text.trim(),
       );
 
-      setState(() => _isLoading = false);
+      setState(() {
+        _isEditing = false;
+        _isLoading = false;
+        _currentNote = updatedNote;
+      });
 
-      if (updatedNote != null) {
-        setState(() {
-          _isEditing = false;
-          _currentNote = updatedNote;
-        });
-
-        // ignore: use_build_context_synchronously
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Note updated successfully!'),
-            backgroundColor: Colors.green,
-            duration: Duration(seconds: 2),
-          ),
-        );
-      } else {
-        // ignore: use_build_context_synchronously
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Failed to update note'),
-            backgroundColor: Colors.red,
-          ),
-        );
-      }
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Note updated successfully!'),
+          backgroundColor: Colors.green,
+        ),
+      );
     } catch (e) {
       setState(() => _isLoading = false);
-      // ignore: use_build_context_synchronously
+
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Error: ${e.toString()}'),
+          content: Text('Failed to update note: $e'),
           backgroundColor: Colors.red,
         ),
       );
     }
   }
 
-  void _deleteData() {
+  void _deleteNote() {
     showDialog(
       context: context,
       builder: (BuildContext context) {
@@ -110,34 +97,22 @@ class _NoteDetailPageState extends State<NoteDetailPage> {
                 setState(() => _isLoading = true);
 
                 try {
-                  final success = await NoteService.deleteNote(_currentNote.id);
+                  await NoteService.deleteNote(_currentNote.id);
 
-                  if (success) {
-                    // ignore: use_build_context_synchronously
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(
-                        content: Text('Note deleted successfully'),
-                        backgroundColor: Colors.green,
-                      ),
-                    );
-                    // ignore: use_build_context_synchronously
-                    Navigator.pop(context, 'deleted');
-                  } else {
-                    setState(() => _isLoading = false);
-                    // ignore: use_build_context_synchronously
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(
-                        content: Text('Failed to delete note'),
-                        backgroundColor: Colors.red,
-                      ),
-                    );
-                  }
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text('Note deleted successfully'),
+                      backgroundColor: Colors.green,
+                    ),
+                  );
+
+                  Navigator.pop(context, true); // Return success
                 } catch (e) {
                   setState(() => _isLoading = false);
-                  // ignore: use_build_context_synchronously
+
                   ScaffoldMessenger.of(context).showSnackBar(
                     SnackBar(
-                      content: Text('Error: ${e.toString()}'),
+                      content: Text('Failed to delete note: $e'),
                       backgroundColor: Colors.red,
                     ),
                   );
@@ -173,7 +148,7 @@ class _NoteDetailPageState extends State<NoteDetailPage> {
                 onTap: () {
                   Navigator.pop(context);
                   if (_isEditing) {
-                    _saveData();
+                    _saveNote();
                   } else {
                     _toggleEditMode();
                   }
@@ -193,7 +168,7 @@ class _NoteDetailPageState extends State<NoteDetailPage> {
                 title: const Text('Delete'),
                 onTap: () {
                   Navigator.pop(context);
-                  _deleteData();
+                  _deleteNote();
                 },
               ),
             ],
@@ -204,7 +179,7 @@ class _NoteDetailPageState extends State<NoteDetailPage> {
   }
 
   String _formatDate(DateTime date) {
-    return '${date.hour}:${date.minute.toString().padLeft(2, '0')} - ${date.day}/${date.month}/${date.year}';
+    return '${date.hour.toString().padLeft(2, '0')}:${date.minute.toString().padLeft(2, '0')} - ${date.day}/${date.month}/${date.year}';
   }
 
   @override
@@ -224,14 +199,14 @@ class _NoteDetailPageState extends State<NoteDetailPage> {
         elevation: 0,
         leading: IconButton(
           icon: const Icon(Icons.arrow_back_ios, color: Colors.black, size: 20),
-          onPressed: () => Navigator.pop(context, _currentNote),
+          onPressed: () => Navigator.pop(context, true),
         ),
         centerTitle: true,
         actions: [
           if (_isEditing)
             IconButton(
               icon: const Icon(Icons.check, color: Colors.green),
-              onPressed: _saveData,
+              onPressed: _saveNote,
             ),
         ],
       ),
@@ -245,7 +220,6 @@ class _NoteDetailPageState extends State<NoteDetailPage> {
                 Container(
                   padding: const EdgeInsets.all(8),
                   decoration: BoxDecoration(
-                    // ignore: deprecated_member_use
                     color: Colors.orange.withOpacity(0.1),
                     borderRadius: BorderRadius.circular(8),
                   ),

@@ -1,82 +1,152 @@
-import 'package:flutter/foundation.dart';
-
+import 'package:dio/dio.dart';
 import '../models/user.dart';
-import 'api_service.dart';
+import 'api_client.dart';
 
 class AuthService {
   static User? _currentUser;
 
-  static Future<bool> register(
-      String email, String password, String name) async {
-    final response = await ApiService.register(
-      name: name,
-      email: email,
-      password: password,
-    );
+  static Future<Map<String, dynamic>> register({
+    required String name,
+    required String email,
+    required String password,
+  }) async {
+    try {
+      final response = await ApiClient.dio.post(
+        '/register',
+        data: {
+          'name': name,
+          'email': email,
+          'password': password,
+        },
+      );
 
-    if (response['success']) {
-      // Auto login after successful registration
-      return await login(email, password);
+      final data = response.data;
+      if (data['meta']['status'] == 'success') {
+        // Save token
+        final token = data['data']['token'];
+        await ApiClient.saveToken(token);
+
+        // Load user profile
+        _currentUser = User.fromJson(data['data']['user']);
+
+        return {'success': true, 'message': data['meta']['message']};
+      } else {
+        return {'success': false, 'message': data['meta']['message']};
+      }
+    } on DioException catch (e) {
+      if (e.response != null) {
+        final errorData = e.response!.data;
+        return {
+          'success': false,
+          'message': errorData['meta']['message'] ?? 'Registration failed'
+        };
+      }
+      return {'success': false, 'message': 'Network error: ${e.message}'};
+    } catch (e) {
+      return {'success': false, 'message': 'Unexpected error: $e'};
     }
-
-    return false;
   }
 
-  static Future<bool> login(String email, String password) async {
-    final response = await ApiService.login(
-      email: email,
-      password: password,
-    );
+  static Future<Map<String, dynamic>> login({
+    required String email,
+    required String password,
+  }) async {
+    try {
+      final response = await ApiClient.dio.post(
+        '/login',
+        data: {
+          'email': email,
+          'password': password,
+        },
+      );
 
-    if (response['success']) {
-      final data = response['data'];
-      final token = data['token'];
+      final data = response.data;
+      if (data['meta']['status'] == 'success') {
+        // Save token
+        final token = data['data']['token'];
+        await ApiClient.saveToken(token);
 
-      // Save token
-      await ApiService.saveToken(token);
+        // Load user profile
+        _currentUser = User.fromJson(data['data']['user']);
 
-      // Load user profile
-      await loadCurrentUser();
-
-      return true;
+        return {'success': true, 'message': data['meta']['message']};
+      } else {
+        return {'success': false, 'message': data['meta']['message']};
+      }
+    } on DioException catch (e) {
+      if (e.response != null) {
+        final errorData = e.response!.data;
+        return {
+          'success': false,
+          'message': errorData['meta']['message'] ?? 'Login failed'
+        };
+      }
+      return {'success': false, 'message': 'Network error: ${e.message}'};
+    } catch (e) {
+      return {'success': false, 'message': 'Unexpected error: $e'};
     }
+  }
 
-    return false;
+  static Future<Map<String, dynamic>> getProfile() async {
+    try {
+      final response = await ApiClient.dio.get('/user');
+
+      final data = response.data;
+      if (data['meta']['status'] == 'success') {
+        _currentUser = User.fromJson(data['data']);
+        return {'success': true, 'user': _currentUser};
+      } else {
+        return {'success': false, 'message': data['meta']['message']};
+      }
+    } on DioException catch (e) {
+      if (e.response?.statusCode == 401) {
+        // Token expired
+        await logout();
+        return {'success': false, 'message': 'Session expired'};
+      }
+
+      if (e.response != null) {
+        final errorData = e.response!.data;
+        return {
+          'success': false,
+          'message': errorData['meta']['message'] ?? 'Failed to get profile'
+        };
+      }
+      return {'success': false, 'message': 'Network error: ${e.message}'};
+    } catch (e) {
+      return {'success': false, 'message': 'Unexpected error: $e'};
+    }
   }
 
   static Future<void> logout() async {
-    _currentUser = null;
-    await ApiService.removeToken();
+    try {
+      // Call logout API if available
+      await ApiClient.dio.post('/logout');
+    } catch (e) {
+      print('Logout API error: $e');
+    } finally {
+      // Always clear local data
+      _currentUser = null;
+      await ApiClient.removeToken();
+    }
   }
 
   static User? getCurrentUser() {
     return _currentUser;
   }
 
-  static Future<void> loadCurrentUser() async {
-    try {
-      final token = await ApiService.getToken();
-      if (token != null) {
-        final response = await ApiService.getProfile();
+  static Future<bool> isLoggedIn() async {
+    final token = await ApiClient.getToken();
+    return token != null && _currentUser != null;
+  }
 
-        if (response['success']) {
-          final userData = response['data']['user'];
-          _currentUser = User.fromJson(userData);
-        }
-      }
-    } catch (e) {
-      if (kDebugMode) {
-        print('Error loading current user: $e');
+  static Future<void> loadCurrentUser() async {
+    final token = await ApiClient.getToken();
+    if (token != null) {
+      final result = await getProfile();
+      if (!result['success']) {
+        print('Failed to load user profile: ${result['message']}');
       }
     }
-  }
-
-  static Future<bool> isLoggedIn() async {
-    final token = await ApiService.getToken();
-    return token != null;
-  }
-
-  static String getErrorMessage(Map<String, dynamic> response) {
-    return response['message'] ?? 'An error occurred';
   }
 }
